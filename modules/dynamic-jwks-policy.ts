@@ -4,7 +4,13 @@ import {
   ZuploContext,
   ZuploRequest,
 } from "@zuplo/runtime";
-import { createRemoteJWKSet, decodeJwt, jwtVerify } from "jose";
+import {
+  createLocalJWKSet,
+  createRemoteJWKSet,
+  decodeJwt,
+  jwtVerify,
+  JWTVerifyGetKey,
+} from "jose";
 
 export interface DynamicJwksAuthPolicyOptions {
   /**
@@ -31,13 +37,34 @@ export interface DynamicJwksAuthPolicyOptions {
 
 // One resolver per issuer (realm), reused for as long as this isolate stays
 // warm. `jose` handles its own internal cache/cooldown and will transparently
-// refetch on an unrecognized `kid` (e.g. after key rotation).
-const jwksByIssuer = new Map<string, ReturnType<typeof createRemoteJWKSet>>();
+// refetch on an unrecognized `kid` (e.g. after key rotation) for the remote
+// (real IdP) path. The same-origin path caches the fetched keyset for the
+// isolate's lifetime.
+const jwksByIssuer = new Map<string, Promise<JWTVerifyGetKey>>();
 
-function getJwks(issuer: string, jwksPath: string) {
+function getJwks(
+  issuer: string,
+  jwksPath: string,
+  request: ZuploRequest,
+  context: ZuploContext,
+): Promise<JWTVerifyGetKey> {
   let jwks = jwksByIssuer.get(issuer);
   if (!jwks) {
-    jwks = createRemoteJWKSet(new URL(`${issuer}${jwksPath}`));
+    const jwksUrl = new URL(`${issuer}${jwksPath}`);
+    const gatewayOrigin = new URL(request.url).origin;
+
+    jwks =
+      jwksUrl.origin === gatewayOrigin
+        ? // Same gateway (e.g. an IdP mocked as routes on this project) - the
+          // platform doesn't allow a Worker to fetch() back out to its own
+          // deployed URL, so invoke the route in-process instead. A real,
+          // separately-hosted Keycloak never hits this path.
+          context
+            .invokeRoute(jwksUrl.pathname)
+            .then((res) => res.json())
+            .then((keySet) => createLocalJWKSet(keySet))
+        : Promise.resolve(createRemoteJWKSet(jwksUrl));
+
     jwksByIssuer.set(issuer, jwks);
   }
   return jwks;
@@ -77,9 +104,13 @@ export const dynamicJwksAuthPolicy: InboundPolicyHandler<
     });
   }
 
-  const jwks = getJwks(issuer, options.jwksPath ?? "/protocol/openid-connect/certs");
-
   try {
+    const jwks = await getJwks(
+      issuer,
+      options.jwksPath ?? "/protocol/openid-connect/certs",
+      request,
+      context,
+    );
     const { payload } = await jwtVerify(token, jwks, {
       issuer,
       audience: options.audience,
@@ -90,13 +121,11 @@ export const dynamicJwksAuthPolicy: InboundPolicyHandler<
       data: payload,
     };
   } catch (err) {
-    const message = (err as Error)?.message ?? String(err);
-    const name = (err as Error)?.name ?? "Error";
-    context.log.warn(`[${policyName}] token verification failed: ${message}`);
-    // TEMPORARY: surfacing the real error for debugging a prod-only failure.
-    // Revert to a generic "Invalid token" detail once diagnosed.
+    context.log.warn(
+      `[${policyName}] token verification failed: ${(err as Error)?.message ?? err}`,
+    );
     return HttpProblems.unauthorized(request, context, {
-      detail: `Invalid token: [${name}] ${message}`,
+      detail: "Invalid token",
     });
   }
 
