@@ -90,11 +90,13 @@ export const dynamicJwksAuthPolicy: InboundPolicyHandler<
       data: payload,
     };
   } catch (err) {
-    context.log.warn(
-      `[${policyName}] token verification failed: ${(err as Error).message}`,
-    );
+    const message = (err as Error)?.message ?? String(err);
+    const name = (err as Error)?.name ?? "Error";
+    context.log.warn(`[${policyName}] token verification failed: ${message}`);
+    // TEMPORARY: surfacing the real error for debugging a prod-only failure.
+    // Revert to a generic "Invalid token" detail once diagnosed.
     return HttpProblems.unauthorized(request, context, {
-      detail: "Invalid token",
+      detail: `Invalid token: [${name}] ${message}`,
     });
   }
 
