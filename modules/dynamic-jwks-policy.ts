@@ -8,13 +8,14 @@ import { createRemoteJWKSet, decodeJwt, jwtVerify } from "jose";
 
 export interface DynamicJwksAuthPolicyOptions {
   /**
-   * Only tokens whose `iss` claim starts with this value are trusted. `iss`
-   * is unverified when we read it, so this allowlist is what stops a forged
-   * token from pointing the gateway at an attacker-controlled JWKS endpoint.
+   * Only tokens whose `iss` claim starts with one of these values are
+   * trusted. `iss` is unverified when we read it, so this allowlist is what
+   * stops a forged token from pointing the gateway at an attacker-controlled
+   * JWKS endpoint.
    *
-   * Example: "https://keycloak.eventim.com/realms/"
+   * Example: ["https://keycloak.eventim.com/realms/"]
    */
-  issuerPrefix: string;
+  issuerPrefixes: string[];
   /**
    * Path appended to `iss` to build the realm's JWKS URL.
    * Defaults to Keycloak's well-known layout.
@@ -67,7 +68,7 @@ export const dynamicJwksAuthPolicy: InboundPolicyHandler<
     });
   }
 
-  if (!issuer || !issuer.startsWith(options.issuerPrefix)) {
+  if (!issuer || !options.issuerPrefixes.some((prefix) => issuer.startsWith(prefix))) {
     context.log.warn(
       `[${policyName}] rejected token with untrusted issuer: ${issuer}`,
     );

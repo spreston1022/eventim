@@ -7,7 +7,10 @@
         "export": "dynamicJwksAuthPolicy",
         "module": "$import(./modules/dynamic-jwks-policy)",
         "options": {
-          "issuerPrefix": "http://localhost:9000/mock-idp/realms/",
+          "issuerPrefixes": [
+            "http://localhost:9000/mock-idp/realms/",
+            "https://eventim-poc-main-9473b72.d2.zuplo.dev/mock-idp/realms/"
+          ],
           "audience": "https://api.eventim-dummy.com"
         }
       }
