@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@zuplo/otel": "^6",
+    "jose": "^5",
     "zuplo": "^6"
   },
   "devDependencies": {

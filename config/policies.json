@@ -1,3 +1,16 @@
 {
-  "policies": []
+  "policies": [
+    {
+      "name": "dynamic-jwks-auth",
+      "policyType": "custom-code-inbound",
+      "handler": {
+        "export": "dynamicJwksAuthPolicy",
+        "module": "$import(./modules/dynamic-jwks-policy)",
+        "options": {
+          "issuerPrefix": "http://localhost:9000/mock-idp/realms/",
+          "audience": "https://api.eventim-dummy.com"
+        }
+      }
+    }
+  ]
 }

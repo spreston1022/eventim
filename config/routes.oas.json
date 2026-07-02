@@ -27,6 +27,82 @@
         },
         "operationId": "rest-50fae0af"
       }
+    },
+    "/mock-idp/realms/{realm}/protocol/openid-connect/certs": {
+      "x-zuplo-path": {
+        "pathMode": "open-api"
+      },
+      "get": {
+        "summary": "Mock Keycloak JWKS endpoint",
+        "description": "Stands in for Keycloak's per-realm JWKS endpoint since no real IdP is configured yet.",
+        "parameters": [
+          {
+            "name": "realm",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" }
+          }
+        ],
+        "x-zuplo-route": {
+          "corsPolicy": "none",
+          "handler": {
+            "export": "jwksHandler",
+            "module": "$import(./modules/mock-idp)"
+          },
+          "policies": {
+            "inbound": []
+          }
+        },
+        "operationId": "mock-idp-jwks"
+      }
+    },
+    "/mock-idp/realms/{realm}/token": {
+      "x-zuplo-path": {
+        "pathMode": "open-api"
+      },
+      "post": {
+        "summary": "Mock Keycloak token endpoint",
+        "description": "Mints a dummy signed JWT for a given realm so the dynamic-jwks-auth policy can be tested without a real IdP. Optional JSON body: { \"aud\": \"...\", \"sub\": \"...\" }.",
+        "parameters": [
+          {
+            "name": "realm",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" }
+          }
+        ],
+        "x-zuplo-route": {
+          "corsPolicy": "none",
+          "handler": {
+            "export": "tokenHandler",
+            "module": "$import(./modules/mock-idp)"
+          },
+          "policies": {
+            "inbound": []
+          }
+        },
+        "operationId": "mock-idp-token"
+      }
+    },
+    "/protected": {
+      "x-zuplo-path": {
+        "pathMode": "open-api"
+      },
+      "get": {
+        "summary": "Route protected by dynamic JWKS resolution",
+        "description": "Accepts a Bearer token from any realm under the trusted issuer prefix - the JWKS URL is derived from the token's iss claim at request time.",
+        "x-zuplo-route": {
+          "corsPolicy": "none",
+          "handler": {
+            "export": "default",
+            "module": "$import(./modules/protected-handler)"
+          },
+          "policies": {
+            "inbound": ["dynamic-jwks-auth"]
+          }
+        },
+        "operationId": "protected-route"
+      }
     }
   }
 }
