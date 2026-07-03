@@ -5,6 +5,26 @@
     "title": "My Zuplo API"
   },
   "paths": {
+    "/health": {
+      "x-zuplo-path": {
+        "pathMode": "open-api"
+      },
+      "get": {
+        "summary": "Liveness check",
+        "description": "Returns a plain 200 with no auth - used to confirm the gateway is up.",
+        "x-zuplo-route": {
+          "corsPolicy": "none",
+          "handler": {
+            "export": "default",
+            "module": "$import(./modules/hello-world)"
+          },
+          "policies": {
+            "inbound": []
+          }
+        },
+        "operationId": "health-check"
+      }
+    },
     "/path-1": {
       "x-zuplo-path": {
         "pathMode": "open-api"
