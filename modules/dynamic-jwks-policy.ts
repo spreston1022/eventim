@@ -14,10 +14,15 @@ import {
 
 export interface DynamicJwksAuthPolicyOptions {
   /**
-   * Only tokens whose `iss` claim starts with one of these values are
-   * trusted. `iss` is unverified when we read it, so this allowlist is what
-   * stops a forged token from pointing the gateway at an attacker-controlled
-   * JWKS endpoint.
+   * Only tokens whose `iss` claim resolves to one of these trusted
+   * host+path prefixes are accepted. `iss` is unverified when we read it, so
+   * this allowlist is what stops a forged token from pointing the gateway at
+   * an attacker-controlled JWKS endpoint.
+   *
+   * Compared via parsed URL (protocol + exact host + path prefix), not raw
+   * string prefix matching - so a crafted issuer like
+   * "https://keycloak.eventim.com.attacker.com/realms/evil" can't slip past
+   * by merely sharing a string prefix with a trusted entry.
    *
    * Example: ["https://keycloak.eventim.com/realms/"]
    */
@@ -33,6 +38,35 @@ export interface DynamicJwksAuthPolicyOptions {
    * instead.
    */
   audience?: string;
+}
+
+// Parses both sides as URLs and compares protocol + exact host + path
+// prefix, rather than doing a raw string startsWith on `iss`. Raw prefix
+// matching is bypassable: "https://keycloak.eventim.com.attacker.com/realms/evil"
+// shares a string prefix with "https://keycloak.eventim.com" but resolves to
+// a completely different host. Comparing the parsed `.host` closes that off
+// regardless of whether a trusted prefix happens to end in a path segment.
+function isTrustedIssuer(issuer: string, trustedPrefixes: string[]): boolean {
+  let issuerUrl: URL;
+  try {
+    issuerUrl = new URL(issuer);
+  } catch {
+    return false;
+  }
+
+  return trustedPrefixes.some((prefix) => {
+    let prefixUrl: URL;
+    try {
+      prefixUrl = new URL(prefix);
+    } catch {
+      return false;
+    }
+    return (
+      issuerUrl.protocol === prefixUrl.protocol &&
+      issuerUrl.host === prefixUrl.host &&
+      issuerUrl.pathname.startsWith(prefixUrl.pathname)
+    );
+  });
 }
 
 // One resolver per issuer (realm), reused for as long as this isolate stays
@@ -95,7 +129,7 @@ export const dynamicJwksAuthPolicy: InboundPolicyHandler<
     });
   }
 
-  if (!issuer || !options.issuerPrefixes.some((prefix) => issuer.startsWith(prefix))) {
+  if (!issuer || !isTrustedIssuer(issuer, options.issuerPrefixes)) {
     context.log.warn(
       `[${policyName}] rejected token with untrusted issuer: ${issuer}`,
     );
