@@ -76,7 +76,28 @@ function isTrustedIssuer(issuer: string, trustedPrefixes: string[]): boolean {
 // refetch on an unrecognized `kid` (e.g. after key rotation) for the remote
 // (real IdP) path. The same-origin path caches the fetched keyset for the
 // isolate's lifetime.
-const jwksByIssuer = new Map<string, Promise<JWTVerifyGetKey>>();
+//
+// Entries are evicted after REALM_IDLE_TTL_MS of inactivity. The realm/issuer
+// cache key is derived from the token's (unverified at this point) `iss`
+// claim, so without a cap this map grows without bound - both from
+// legitimate realm churn over the life of a long-running isolate, and from
+// anyone crafting distinct fake realm paths under an otherwise-trusted host.
+const REALM_IDLE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
+
+interface CachedJwks {
+  jwks: Promise<JWTVerifyGetKey>;
+  lastUsedAt: number;
+}
+
+const jwksByIssuer = new Map<string, CachedJwks>();
+
+function evictIdleJwks(now: number): void {
+  for (const [issuer, entry] of jwksByIssuer) {
+    if (now - entry.lastUsedAt > REALM_IDLE_TTL_MS) {
+      jwksByIssuer.delete(issuer);
+    }
+  }
+}
 
 function getJwks(
   issuer: string,
@@ -84,25 +105,31 @@ function getJwks(
   request: ZuploRequest,
   context: ZuploContext,
 ): Promise<JWTVerifyGetKey> {
-  let jwks = jwksByIssuer.get(issuer);
-  if (!jwks) {
-    const jwksUrl = new URL(`${issuer}${jwksPath}`);
-    const gatewayOrigin = new URL(request.url).origin;
+  const now = Date.now();
+  evictIdleJwks(now);
 
-    jwks =
-      jwksUrl.origin === gatewayOrigin
-        ? // Same gateway (e.g. an IdP mocked as routes on this project) - the
-          // platform doesn't allow a Worker to fetch() back out to its own
-          // deployed URL, so invoke the route in-process instead. A real,
-          // separately-hosted Keycloak never hits this path.
-          context
-            .invokeRoute(jwksUrl.pathname)
-            .then((res) => res.json())
-            .then((keySet) => createLocalJWKSet(keySet))
-        : Promise.resolve(createRemoteJWKSet(jwksUrl));
-
-    jwksByIssuer.set(issuer, jwks);
+  const cached = jwksByIssuer.get(issuer);
+  if (cached) {
+    cached.lastUsedAt = now;
+    return cached.jwks;
   }
+
+  const jwksUrl = new URL(`${issuer}${jwksPath}`);
+  const gatewayOrigin = new URL(request.url).origin;
+
+  const jwks =
+    jwksUrl.origin === gatewayOrigin
+      ? // Same gateway (e.g. an IdP mocked as routes on this project) - the
+        // platform doesn't allow a Worker to fetch() back out to its own
+        // deployed URL, so invoke the route in-process instead. A real,
+        // separately-hosted Keycloak never hits this path.
+        context
+          .invokeRoute(jwksUrl.pathname)
+          .then((res) => res.json())
+          .then((keySet) => createLocalJWKSet(keySet))
+      : Promise.resolve(createRemoteJWKSet(jwksUrl));
+
+  jwksByIssuer.set(issuer, { jwks, lastUsedAt: now });
   return jwks;
 }
 
