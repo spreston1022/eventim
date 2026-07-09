@@ -1,6 +1,7 @@
 import {
   HttpProblems,
   InboundPolicyHandler,
+  ZoneCache,
   ZuploContext,
   ZuploRequest,
 } from "@zuplo/runtime";
@@ -11,6 +12,7 @@ import {
   jwtVerify,
   JWTVerifyGetKey,
 } from "jose";
+import { createTokenDenyList } from "./token-deny-list.js";
 
 export interface DynamicJwksAuthPolicyOptions {
   /**
@@ -120,10 +122,21 @@ export const dynamicJwksAuthPolicy: InboundPolicyHandler<
   }
   const token = authHeader.slice("Bearer ".length);
 
+  const denyCache = new ZoneCache<number>("denied-token-cache", context);
+  const denyList = createTokenDenyList(token, denyCache, context);
+
+  if (await denyList.isDenied()) {
+    context.log.warn(`[${policyName}] rejected denied token`);
+    return HttpProblems.unauthorized(request, context, {
+      detail: "Token denied",
+    });
+  }
+
   let issuer: string | undefined;
   try {
     issuer = decodeJwt(token).iss;
   } catch {
+    await denyList.deny();
     return HttpProblems.unauthorized(request, context, {
       detail: "Malformed token",
     });
@@ -133,6 +146,7 @@ export const dynamicJwksAuthPolicy: InboundPolicyHandler<
     context.log.warn(
       `[${policyName}] rejected token with untrusted issuer: ${issuer}`,
     );
+    await denyList.deny();
     return HttpProblems.unauthorized(request, context, {
       detail: "Untrusted issuer",
     });
@@ -158,6 +172,7 @@ export const dynamicJwksAuthPolicy: InboundPolicyHandler<
     context.log.warn(
       `[${policyName}] token verification failed: ${(err as Error)?.message ?? err}`,
     );
+    await denyList.deny();
     return HttpProblems.unauthorized(request, context, {
       detail: "Invalid token",
     });
