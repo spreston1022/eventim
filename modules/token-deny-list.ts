@@ -1,11 +1,11 @@
-import { ZoneCache, ZuploContext } from "@zuplo/runtime";
+import { MemoryZoneReadThroughCache, ZuploContext } from "@zuplo/runtime";
 
 // TTL is just cache hygiene -- a denied token never becomes valid later.
 const DENY_TTL_SECONDS = 60 * 60; // 1 hour
 
 export function createTokenDenyList(
   token: string,
-  denyCache: ZoneCache<number>,
+  denyCache: MemoryZoneReadThroughCache<number>,
   context: ZuploContext,
 ) {
   const keyPromise = hashToken(token);
@@ -24,9 +24,12 @@ export function createTokenDenyList(
     },
     async deny(): Promise<void> {
       const key = await keyPromise;
-      denyCache
-        .put(key, Date.now(), DENY_TTL_SECONDS)
-        .catch((err) => context.log.error("Error writing token deny cache", err));
+      try {
+        // put() is synchronous (in-memory tier first, zone tier in the background).
+        denyCache.put(key, Date.now(), DENY_TTL_SECONDS);
+      } catch (err) {
+        context.log.error("Error writing token deny cache", err);
+      }
     },
   };
 }
