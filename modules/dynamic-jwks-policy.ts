@@ -56,7 +56,10 @@ function getEffectiveAudience(
   options: DynamicJwksAuthPolicyOptions,
 ): string | undefined {
   const routeData = context.route.raw<RouteEventimAuthExtension>();
-  return routeData["x-eventim-auth"]?.audience ?? options.audience;
+  // || rather than ?? - an explicit-but-empty route audience ("") is
+  // misconfiguration, not a deliberate "no audience" signal, so it should
+  // fall back to the policy default the same way an absent one does.
+  return routeData?.["x-eventim-auth"]?.audience || options.audience;
 }
 
 // Parses both sides as URLs and compares protocol + exact host + path
@@ -70,6 +73,16 @@ function isTrustedIssuer(issuer: string, trustedPrefixes: string[]): boolean {
   try {
     issuerUrl = new URL(issuer);
   } catch {
+    return false;
+  }
+
+  // A query string or fragment isn't part of any legitimate Keycloak realm
+  // issuer, and would otherwise get carried into the JWKS URL we build from
+  // this same issuer string later, silently breaking the JWKS path
+  // (`?a=b/protocol/openid-connect/certs` ends up inside the query, not
+  // appended to the path). Reject outright rather than let a weird-but-
+  // still-host-trusted variant pollute the JWKS cache with garbage keys.
+  if (issuerUrl.search || issuerUrl.hash) {
     return false;
   }
 
@@ -100,6 +113,7 @@ function isTrustedIssuer(issuer: string, trustedPrefixes: string[]): boolean {
 // legitimate realm churn over the life of a long-running isolate, and from
 // anyone crafting distinct fake realm paths under an otherwise-trusted host.
 const REALM_IDLE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
+const REALM_SWEEP_INTERVAL_MS = 60 * 1000; // rate-limit the full-map sweep to once/minute
 
 interface CachedJwks {
   jwks: Promise<JWTVerifyGetKey>;
@@ -107,8 +121,18 @@ interface CachedJwks {
 }
 
 const jwksByIssuer = new Map<string, CachedJwks>();
+let lastRealmSweepAt = 0;
 
+// Throttled rather than run on every request - same pattern as
+// token-deny-list.ts's sweepExpired. An unthrottled full-map sweep is
+// negligible at expected cardinality, but scales linearly with map size and
+// so works against you specifically under the attack this eviction exists
+// to defend against (many fake realm names inflating the map).
 function evictIdleJwks(now: number): void {
+  if (now - lastRealmSweepAt < REALM_SWEEP_INTERVAL_MS) {
+    return;
+  }
+  lastRealmSweepAt = now;
   for (const [issuer, entry] of jwksByIssuer) {
     if (now - entry.lastUsedAt > REALM_IDLE_TTL_MS) {
       jwksByIssuer.delete(issuer);
@@ -176,8 +200,11 @@ export const dynamicJwksAuthPolicy: InboundPolicyHandler<
 ) => {
   const authHeader = request.headers.get("authorization") ?? "";
   // Auth-scheme names are case-insensitive (RFC 7235) - a client sending
-  // "bearer <token>" is just as valid as "Bearer <token>".
-  const bearerMatch = /^Bearer\s+(.+)$/i.exec(authHeader);
+  // "bearer <token>" is just as valid as "Bearer <token>". \S+ (not .+)
+  // so trailing whitespace doesn't get folded into the token - a JWT's
+  // compact serialization never contains whitespace, and a naive .+ would
+  // otherwise capture a whitespace-only "token" as a non-empty match.
+  const bearerMatch = /^Bearer\s+(\S+)\s*$/i.exec(authHeader);
   if (!bearerMatch) {
     return HttpProblems.unauthorized(request, context, {
       detail: "Missing bearer token",
