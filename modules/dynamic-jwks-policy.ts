@@ -35,11 +35,28 @@ export interface DynamicJwksAuthPolicyOptions {
    */
   jwksPath?: string;
   /**
-   * Expected `aud` claim. Omit to skip audience validation at the gateway
-   * (e.g. audience isn't consistent across realms) and enforce it downstream
-   * instead.
+   * Expected `aud` claim, used when the route itself doesn't declare its own
+   * `x-eventim-auth.audience` (see {@link getEffectiveAudience}). Omit both
+   * to skip audience validation at the gateway (e.g. audience isn't
+   * consistent across realms) and enforce it downstream instead.
    */
   audience?: string;
+}
+
+interface RouteEventimAuthExtension {
+  "x-eventim-auth"?: { audience?: string };
+}
+
+// Audience can be pinned per-route via an `x-eventim-auth.audience` OAS
+// extension (e.g. several routes sharing one policy instance but expecting
+// different audiences), falling back to the policy-level `options.audience`
+// default when a route doesn't declare its own.
+function getEffectiveAudience(
+  context: ZuploContext,
+  options: DynamicJwksAuthPolicyOptions,
+): string | undefined {
+  const routeData = context.route.raw<RouteEventimAuthExtension>();
+  return routeData["x-eventim-auth"]?.audience ?? options.audience;
 }
 
 // Parses both sides as URLs and compares protocol + exact host + path
@@ -203,7 +220,7 @@ export const dynamicJwksAuthPolicy: InboundPolicyHandler<
     );
     const { payload } = await jwtVerify(token, jwks, {
       issuer,
-      audience: options.audience,
+      audience: getEffectiveAudience(context, options),
     });
 
     request.user = {
