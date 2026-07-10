@@ -174,15 +174,19 @@ export const dynamicJwksAuthPolicy: InboundPolicyHandler<
   options: DynamicJwksAuthPolicyOptions,
   policyName: string,
 ) => {
-  const authHeader = request.headers.get("authorization");
-  if (!authHeader?.startsWith("Bearer ")) {
+  const authHeader = request.headers.get("authorization") ?? "";
+  // Auth-scheme names are case-insensitive (RFC 7235) - a client sending
+  // "bearer <token>" is just as valid as "Bearer <token>".
+  const bearerMatch = /^Bearer\s+(.+)$/i.exec(authHeader);
+  if (!bearerMatch) {
     return HttpProblems.unauthorized(request, context, {
       detail: "Missing bearer token",
     });
   }
-  const token = authHeader.slice("Bearer ".length);
+  const token = bearerMatch[1];
 
-  const denyList = createTokenDenyList(token);
+  const effectiveAudience = getEffectiveAudience(context, options);
+  const denyList = createTokenDenyList(token, effectiveAudience);
 
   if (await denyList.isDenied()) {
     context.log.warn(`[${policyName}] rejected denied token`);
@@ -220,11 +224,18 @@ export const dynamicJwksAuthPolicy: InboundPolicyHandler<
     );
     const { payload } = await jwtVerify(token, jwks, {
       issuer,
-      audience: getEffectiveAudience(context, options),
+      audience: effectiveAudience,
     });
 
+    if (typeof payload.sub !== "string" || payload.sub.length === 0) {
+      await denyList.deny();
+      return HttpProblems.unauthorized(request, context, {
+        detail: "No valid sub claim in token",
+      });
+    }
+
     request.user = {
-      sub: typeof payload.sub === "string" ? payload.sub : "unknown",
+      sub: payload.sub,
       data: payload,
     };
   } catch (err) {

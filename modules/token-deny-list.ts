@@ -31,8 +31,27 @@ function sweepExpired(now: number): void {
   }
 }
 
-export function createTokenDenyList(token: string) {
-  const keyPromise = hashToken(token);
+// scope is the effective expected audience for this check (see
+// getEffectiveAudience in dynamic-jwks-policy.ts). One policy instance can
+// serve multiple routes expecting different audiences, and audience
+// mismatch is the one failure mode that's context-dependent rather than an
+// intrinsic property of the token - the same token can be genuinely valid
+// for route A's audience while invalid for route B's. Without scoping,
+// a wrong-audience rejection on one route would incorrectly block the same
+// token on a different route where it would otherwise pass. Other failure
+// types (bad signature, expired, malformed) are token-intrinsic and would
+// simply get independently re-denied per scope - a minor efficiency cost,
+// not a correctness issue.
+export function createTokenDenyList(token: string, scope?: string) {
+  // Combine two independently-hashed fixed-length digests rather than
+  // concatenating raw strings - the token isn't validated as a real JWT at
+  // this point, so it could in principle contain whatever separator we'd
+  // otherwise pick.
+  const keyPromise = scope
+    ? Promise.all([hashToken(token), hashToken(scope)]).then(
+        ([tokenHash, scopeHash]) => `${tokenHash}:${scopeHash}`,
+      )
+    : hashToken(token);
 
   return {
     async isDenied(): Promise<boolean> {
