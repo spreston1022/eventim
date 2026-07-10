@@ -9,6 +9,7 @@ import {
   createLocalJWKSet,
   createRemoteJWKSet,
   decodeJwt,
+  errors,
   jwtVerify,
   JWTVerifyGetKey,
 } from "jose";
@@ -125,11 +126,27 @@ function getJwks(
         // separately-hosted Keycloak never hits this path.
         context
           .invokeRoute(jwksUrl.pathname)
-          .then((res) => res.json())
+          .then((res) => {
+            if (!res.ok) {
+              throw new Error(`JWKS fetch failed with status ${res.status}`);
+            }
+            return res.json();
+          })
           .then((keySet) => createLocalJWKSet(keySet))
       : Promise.resolve(createRemoteJWKSet(jwksUrl));
 
   jwksByIssuer.set(issuer, { jwks, lastUsedAt: now });
+
+  // A rejected promise would otherwise sit in the cache and be served to
+  // every subsequent request for this issuer forever (each hit also
+  // refreshes lastUsedAt, so idle-eviction never kicks in either). Evict it
+  // so the next request gets a fresh attempt instead of the same failure.
+  jwks.catch(() => {
+    if (jwksByIssuer.get(issuer)?.jwks === jwks) {
+      jwksByIssuer.delete(issuer);
+    }
+  });
+
   return jwks;
 }
 
@@ -202,7 +219,13 @@ export const dynamicJwksAuthPolicy: InboundPolicyHandler<
     context.log.warn(
       `[${policyName}] token verification failed: ${(err as Error)?.message ?? err}`,
     );
-    await denyList.deny();
+    // Only deny-list on errors that mean the token itself is bad - a
+    // transient JWKS-fetch failure or network blip shouldn't lock out a
+    // token that would otherwise verify fine once the IdP is reachable
+    // again.
+    if (isDefinitivelyInvalidToken(err)) {
+      await denyList.deny();
+    }
     return HttpProblems.unauthorized(request, context, {
       detail: "Invalid token",
     });
@@ -210,5 +233,16 @@ export const dynamicJwksAuthPolicy: InboundPolicyHandler<
 
   return request;
 };
+
+function isDefinitivelyInvalidToken(err: unknown): boolean {
+  return (
+    err instanceof errors.JWTClaimValidationFailed ||
+    err instanceof errors.JWTExpired ||
+    err instanceof errors.JWSSignatureVerificationFailed ||
+    err instanceof errors.JWTInvalid ||
+    err instanceof errors.JWSInvalid ||
+    err instanceof errors.JWKSNoMatchingKey
+  );
+}
 
 export default dynamicJwksAuthPolicy;
