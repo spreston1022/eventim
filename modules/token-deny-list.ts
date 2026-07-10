@@ -1,35 +1,58 @@
-import { MemoryZoneReadThroughCache, ZuploContext } from "@zuplo/runtime";
+// A legitimate token is, by definition, always a miss here - so this is a
+// plain per-isolate in-process Map rather than MemoryZoneReadThroughCache.
+// That cache's zone tier is unconditionally consulted on every memory miss
+// (no negative-result caching), meaning every valid request would pay a
+// real cache-backend round trip just to learn "not denied" - far more
+// expensive than the ~30us jwtVerify() this check exists to skip, and for
+// no benefit since the zone tier doesn't reliably work on Linode anyway.
+// Worst case without cross-isolate sharing: a repeated bad token gets
+// independently re-verified (~30us) and re-denied on each isolate it lands
+// on, instead of once globally - negligible next to what a real volumetric
+// attack would need to cost anything.
+const DENY_TTL_MS = 60 * 60 * 1000; // 1 hour
+const SWEEP_INTERVAL_MS = 60 * 1000; // rate-limit the full-map sweep to once/minute
 
-// TTL is just cache hygiene -- a denied token never becomes valid later.
-const DENY_TTL_SECONDS = 60 * 60; // 1 hour
+const deniedTokens = new Map<string, number>(); // hash -> deniedAt
+let lastSweepAt = 0;
 
-export function createTokenDenyList(
-  token: string,
-  denyCache: MemoryZoneReadThroughCache<number>,
-  context: ZuploContext,
-) {
+// Bounds memory from a sustained attack using many distinct never-repeated
+// bad tokens, where lazy per-key expiry (below) would never fire. Rate
+// limited so it doesn't become the same per-request O(n) cost this whole
+// design is meant to avoid.
+function sweepExpired(now: number): void {
+  if (now - lastSweepAt < SWEEP_INTERVAL_MS) {
+    return;
+  }
+  lastSweepAt = now;
+  for (const [key, deniedAt] of deniedTokens) {
+    if (now - deniedAt > DENY_TTL_MS) {
+      deniedTokens.delete(key);
+    }
+  }
+}
+
+export function createTokenDenyList(token: string) {
   const keyPromise = hashToken(token);
 
   return {
     async isDenied(): Promise<boolean> {
-      try {
-        const key = await keyPromise;
-        const deniedAt = await denyCache.get(key);
-        return deniedAt !== undefined;
-      } catch (err) {
-        // Fail open -- this is a perf optimization, not the security boundary.
-        context.log.error("Error reading token deny cache", err);
+      const now = Date.now();
+      sweepExpired(now);
+
+      const key = await keyPromise;
+      const deniedAt = deniedTokens.get(key);
+      if (deniedAt === undefined) {
         return false;
       }
+      if (now - deniedAt > DENY_TTL_MS) {
+        deniedTokens.delete(key);
+        return false;
+      }
+      return true;
     },
     async deny(): Promise<void> {
       const key = await keyPromise;
-      try {
-        // put() is synchronous (in-memory tier first, zone tier in the background).
-        denyCache.put(key, Date.now(), DENY_TTL_SECONDS);
-      } catch (err) {
-        context.log.error("Error writing token deny cache", err);
-      }
+      deniedTokens.set(key, Date.now());
     },
   };
 }

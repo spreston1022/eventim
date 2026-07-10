@@ -123,26 +123,6 @@
         },
         "operationId": "protected-route"
       }
-    },
-    "/temp-deny-bench": {
-      "x-zuplo-path": {
-        "pathMode": "open-api"
-      },
-      "get": {
-        "summary": "TEMP: benchmark MemoryZoneReadThroughCache-backed deny-list cost",
-        "description": "Temporary route for measuring real isDenied() cost, not part of the auth surface. To be removed.",
-        "x-zuplo-route": {
-          "corsPolicy": "none",
-          "handler": {
-            "export": "default",
-            "module": "$import(./modules/deny-list-bench)"
-          },
-          "policies": {
-            "inbound": []
-          }
-        },
-        "operationId": "temp-deny-bench"
-      }
     }
   }
 }

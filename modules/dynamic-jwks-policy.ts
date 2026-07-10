@@ -1,7 +1,6 @@
 import {
   HttpProblems,
   InboundPolicyHandler,
-  MemoryZoneReadThroughCache,
   ZuploContext,
   ZuploRequest,
 } from "@zuplo/runtime";
@@ -166,11 +165,7 @@ export const dynamicJwksAuthPolicy: InboundPolicyHandler<
   }
   const token = authHeader.slice("Bearer ".length);
 
-  const denyCache = new MemoryZoneReadThroughCache<number>(
-    "denied-token-cache",
-    context,
-  );
-  const denyList = createTokenDenyList(token, denyCache, context);
+  const denyList = createTokenDenyList(token);
 
   if (await denyList.isDenied()) {
     context.log.warn(`[${policyName}] rejected denied token`);
