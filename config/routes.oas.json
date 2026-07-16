@@ -123,6 +123,26 @@
         },
         "operationId": "protected-route"
       }
+    },
+    "/eventim-protected": {
+      "x-zuplo-path": {
+        "pathMode": "open-api"
+      },
+      "get": {
+        "summary": "TEST: Sebastian's corrected eventim-jwks-policy, wired to our mock-idp",
+        "description": "Not a real product route - exercises eventimJwksAuthPolicy end-to-end before sending it back.",
+        "x-zuplo-route": {
+          "corsPolicy": "none",
+          "handler": {
+            "export": "default",
+            "module": "$import(./modules/protected-handler)"
+          },
+          "policies": {
+            "inbound": ["eventim-jwks-auth-test"]
+          }
+        },
+        "operationId": "eventim-protected-route"
+      }
     }
   }
 }

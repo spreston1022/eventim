@@ -15,6 +15,21 @@
           "audience": "https://api.eventim-dummy.com"
         }
       }
+    },
+    {
+      "name": "eventim-jwks-auth-test",
+      "policyType": "custom-code-inbound",
+      "handler": {
+        "export": "eventimJwksAuthPolicy",
+        "module": "$import(./modules/eventim-jwks-policy)",
+        "options": {
+          "issuerPrefixes": [
+            "http://localhost:9000",
+            "https://eventim-poc-main-eb180b4.zuplo.app"
+          ],
+          "jwksTemplate": "/mock-idp/realms/${realm}/protocol/openid-connect/certs"
+        }
+      }
     }
   ]
 }
