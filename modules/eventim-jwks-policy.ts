@@ -106,11 +106,11 @@ export const eventimJwksAuthPolicy: InboundPolicyHandler<
         });
     }
 
-    // isTrustedIssuer only checks protocol+host, not path, so a trusted-host
-    // issuer can still fail to contain a `realms` segment - wrapped so a
-    // crafted issuer yields a clean 401 instead of an uncaught exception
-    // (which would otherwise surface as a 500, before the token's signature
-    // has even been checked).
+    // The path-prefix check in isTrustedIssuer doesn't guarantee a `realms`
+    // segment (e.g. a prefix with pathname "/"), so a trusted-host issuer
+    // can still fail here - wrapped so a crafted issuer yields a clean 401
+    // instead of an uncaught exception (which would otherwise surface as a
+    // 500, before the token's signature has even been checked).
     let realm: string;
     try {
         realm = getRealmFromIssuer(issuer);
