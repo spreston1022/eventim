@@ -131,6 +131,9 @@
       "get": {
         "summary": "TEST: Sebastian's corrected eventim-jwks-policy, wired to our mock-idp",
         "description": "Not a real product route - exercises eventimJwksAuthPolicy end-to-end before sending it back.",
+        "x-eventim-auth": {
+          "audience": "https://api.eventim-dummy.com"
+        },
         "x-zuplo-route": {
           "corsPolicy": "none",
           "handler": {

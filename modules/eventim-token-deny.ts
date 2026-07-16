@@ -19,9 +19,9 @@ function sweepExpired(now: number): void {
   }
 }
 
-export function createTokenDenyList(token: string): TokenDenyList {
+export function createTokenDenyList(token: string, scope?: string): TokenDenyList {
   let hashPromise: Promise<string> | null = null;
-  const getHash = () => (hashPromise ??= hashToken(token));
+  const getHash = () => (hashPromise ??= computeKey(token, scope));
 
   return {
     async isDenied() {
@@ -48,4 +48,15 @@ async function hashToken(token: string): Promise<string> {
   const data = new TextEncoder().encode(token);
   const buf = await crypto.subtle.digest("SHA-256", data);
   return Array.from(new Uint8Array(buf), (b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+// Without `scope`, a token denied under one policy instance's config (e.g.
+// rejected as an untrusted issuer) stays denied everywhere for the TTL, even
+// on another instance where the same issuer is trusted. Mixing in a scope
+// (e.g. the policy name) keeps deny verdicts local to the config that made them.
+async function computeKey(token: string, scope?: string): Promise<string> {
+  const tokenHash = await hashToken(token);
+  if (!scope) return tokenHash;
+  const scopeHash = await hashToken(scope);
+  return `${tokenHash}:${scopeHash}`;
 }

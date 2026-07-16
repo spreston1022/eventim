@@ -18,7 +18,7 @@ interface CachedJwks {
   lastUsedAt: number;
 }
 
-const jwksByIssuer = new Map<string, CachedJwks>();
+const jwksByUri = new Map<string, CachedJwks>();
 let lastRealmSweepAt = 0;
 
 // Throttled rather than run on every request - an unthrottled full-map sweep
@@ -30,14 +30,14 @@ function evictIdleJwks(now: number): void {
     return;
   }
   lastRealmSweepAt = now;
-  for (const [key, entry] of jwksByIssuer) {
+  for (const [key, entry] of jwksByUri) {
     if (now - entry.lastUsedAt > REALM_IDLE_TTL_MS) {
-      jwksByIssuer.delete(key);
+      jwksByUri.delete(key);
     }
   }
 }
 
-export default function getJwks(issuer: string, jwksUri: URL): JWTVerifyGetKey {
+export default function getJwks(jwksUri: URL): JWTVerifyGetKey {
   const now = Date.now();
   evictIdleJwks(now);
 
@@ -46,13 +46,13 @@ export default function getJwks(issuer: string, jwksUri: URL): JWTVerifyGetKey {
   // different templates would otherwise silently share whichever resolver
   // was created first.
   const key = jwksUri.href;
-  const cached = jwksByIssuer.get(key);
+  const cached = jwksByUri.get(key);
   if (cached) {
     cached.lastUsedAt = now;
     return cached.jwks;
   }
 
   const jwks = createRemoteJWKSet(jwksUri);
-  jwksByIssuer.set(key, { jwks, lastUsedAt: now });
+  jwksByUri.set(key, { jwks, lastUsedAt: now });
   return jwks;
 }

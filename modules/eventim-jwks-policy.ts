@@ -30,7 +30,8 @@ function isTrustedIssuer(issuer: string, trustedPrefixes: string[]): boolean {
         }
         return (
             issuerUrl.protocol === prefixUrl.protocol &&
-            issuerUrl.host === prefixUrl.host
+            issuerUrl.host === prefixUrl.host &&
+            issuerUrl.pathname.startsWith(prefixUrl.pathname)
         );
     });
 }
@@ -67,14 +68,16 @@ export const eventimJwksAuthPolicy: InboundPolicyHandler<
     policyName: string,
 ) => {
     const config = {...DEFAULTS, ...options};
-    const authHeader = request.headers.get("authorization");
-    if (!authHeader?.startsWith("Bearer ")) {
+    const authHeader = request.headers.get("authorization") ?? "";
+    // "bearer <token>" is just as valid as "Bearer <token>" per RFC 7235.
+    const bearerMatch = /^Bearer\s+(\S+)\s*$/i.exec(authHeader);
+    if (!bearerMatch) {
         return HttpProblems.unauthorized(request, context, {
             detail: "Missing bearer token",
         });
     }
-    const token = authHeader.slice("Bearer ".length);
-    const denyList = createTokenDenyList(token);
+    const token = bearerMatch[1];
+    const denyList = createTokenDenyList(token, policyName);
 
     if (await denyList.isDenied()) {
         return HttpProblems.unauthorized(request, context, {
@@ -119,9 +122,9 @@ export const eventimJwksAuthPolicy: InboundPolicyHandler<
     }
 
     const routeData = context.route.raw<{ "x-eventim-auth"?: { audience?: string } }>();
-    const audience = routeData["x-eventim-auth"]?.audience;
+    const audience = routeData?.["x-eventim-auth"]?.audience;
 
-    const jwks = getJwks(issuer, buildJwksUri(config.jwksTemplate, issuer, realm));
+    const jwks = getJwks(buildJwksUri(config.jwksTemplate, issuer, realm));
 
     let payload: JWTPayload;
     try {
@@ -130,7 +133,10 @@ export const eventimJwksAuthPolicy: InboundPolicyHandler<
         // would just compare the token's claimed issuer to itself, which
         // always passes and validates nothing.
         ({ payload } = await jwtVerify(token, jwks, { audience }));
-    } catch {
+    } catch (err) {
+        context.log.warn(
+            `[${policyName}] token verification failed: ${(err as Error)?.message}`,
+        );
         return HttpProblems.unauthorized(request, context, {
             detail: "Could not verify token"
         });
