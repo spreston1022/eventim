@@ -25,7 +25,8 @@
         "options": {
           "issuerPrefixes": [
             "http://localhost:9000",
-            "https://eventim-poc-main-eb180b4.zuplo.app"
+            "https://eventim-poc-main-eb180b4.zuplo.app",
+            "https://eventim-poc-main-9473b72.d2.zuplo.dev"
           ],
           "jwksTemplate": "/mock-idp/realms/${realm}/protocol/openid-connect/certs"
         }
