@@ -57,29 +57,6 @@ async function hashToken(token: string): Promise<string> {
 async function computeKey(token: string, scope?: string): Promise<string> {
   const tokenHash = await hashToken(token);
   if (!scope) return tokenHash;
-  const scopeHash = await getScopeHash(scope);
+  const scopeHash = await hashToken(scope);
   return `${tokenHash}:${scopeHash}`;
-}
-
-// `scope` is a policy name - fixed for the life of the isolate, not
-// per-request - so hashing it on every single call is pure waste. Cached
-// per distinct scope value (not a single flat variable) so multiple policy
-// instances sharing this module, each with their own scope, don't collide.
-// Measured ~8µs/call saved (~33% of jwtVerify's own per-call cost).
-const scopeHashCache = new Map<string, Promise<string>>();
-function getScopeHash(scope: string): Promise<string> {
-  let cached = scopeHashCache.get(scope);
-  if (!cached) {
-    cached = hashToken(scope);
-    scopeHashCache.set(scope, cached);
-    // A rejected promise would otherwise sit cached forever - evict it so
-    // the next call gets a fresh attempt instead of permanently failing
-    // every isDenied()/deny() for this scope until the isolate recycles.
-    cached.catch(() => {
-      if (scopeHashCache.get(scope) === cached) {
-        scopeHashCache.delete(scope);
-      }
-    });
-  }
-  return cached;
 }
