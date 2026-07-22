@@ -52,6 +52,13 @@ function getRealmFromIssuer(iss: string) {
     return parts[idx + 1];
 }
 
+function buildJwksUri(jwksTemplate: string, issuer: string, realm: string) {
+    return new URL(
+        jwksTemplate.replace("${realm}", realm),
+        issuer,
+    );
+}
+
 export const eventimJwksAuthPolicy: InboundPolicyHandler<
     JwksPolicyOptions
 > = async (
@@ -117,7 +124,7 @@ export const eventimJwksAuthPolicy: InboundPolicyHandler<
     const routeData = context.route.raw<{ "x-eventim-auth"?: { audience?: string } }>();
     const audience = routeData?.["x-eventim-auth"]?.audience;
 
-    const jwks = getJwks(config.jwksTemplate, issuer, realm);
+    const jwks = getJwks(buildJwksUri(config.jwksTemplate, issuer, realm));
 
     let payload: JWTPayload;
     try {
