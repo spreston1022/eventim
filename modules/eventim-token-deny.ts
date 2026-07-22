@@ -72,6 +72,14 @@ function getScopeHash(scope: string): Promise<string> {
   if (!cached) {
     cached = hashToken(scope);
     scopeHashCache.set(scope, cached);
+    // A rejected promise would otherwise sit cached forever - evict it so
+    // the next call gets a fresh attempt instead of permanently failing
+    // every isDenied()/deny() for this scope until the isolate recycles.
+    cached.catch(() => {
+      if (scopeHashCache.get(scope) === cached) {
+        scopeHashCache.delete(scope);
+      }
+    });
   }
   return cached;
 }
