@@ -146,6 +146,26 @@
         },
         "operationId": "eventim-protected-route"
       }
+    },
+    "/fetch-span-test": {
+      "x-zuplo-path": {
+        "pathMode": "open-api"
+      },
+      "get": {
+        "summary": "TEST: does a fetch() inside a custom policy show up as its own child span?",
+        "description": "Temporary diagnostic route, not a real product route - see modules/fetch-span-test-policy.ts.",
+        "x-zuplo-route": {
+          "corsPolicy": "none",
+          "handler": {
+            "export": "default",
+            "module": "$import(./modules/hello-world)"
+          },
+          "policies": {
+            "inbound": ["fetch-span-test"]
+          }
+        },
+        "operationId": "fetch-span-test-route"
+      }
     }
   }
 }

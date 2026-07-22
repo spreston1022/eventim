@@ -30,6 +30,14 @@
           "jwksTemplate": "/mock-idp/realms/${realm}/protocol/openid-connect/certs"
         }
       }
+    },
+    {
+      "name": "fetch-span-test",
+      "policyType": "custom-code-inbound",
+      "handler": {
+        "export": "fetchSpanTestPolicy",
+        "module": "$import(./modules/fetch-span-test-policy)"
+      }
     }
   ]
 }
