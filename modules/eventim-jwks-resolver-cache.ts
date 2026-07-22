@@ -37,21 +37,35 @@ function evictIdleJwks(now: number): void {
   }
 }
 
-export default function getJwks(jwksUri: URL): JWTVerifyGetKey {
+// Cheap surrogate key - issuer + jwksTemplate + realm together fully
+// determine the resolved JWKS URI, so this is just as specific as the real
+// jwksUri.href without needing a string .replace() + URL parse just to
+// check whether the cache already has an entry.
+function buildKey(jwksTemplate: string, issuer: string, realm: string): string {
+  return `${issuer}|${jwksTemplate}|${realm}`;
+}
+
+export default function getJwks(
+  jwksTemplate: string,
+  issuer: string,
+  realm: string,
+): JWTVerifyGetKey {
   const now = Date.now();
   evictIdleJwks(now);
 
-  // Keyed by the full JWKS URI, not just the issuer - the resolver is built
-  // from issuer + jwksTemplate, so two configs sharing an issuer but using
-  // different templates would otherwise silently share whichever resolver
-  // was created first.
-  const key = jwksUri.href;
+  // Keyed by issuer + jwksTemplate + realm, not just the issuer - two
+  // configs sharing an issuer but using different templates would otherwise
+  // silently share whichever resolver was created first.
+  const key = buildKey(jwksTemplate, issuer, realm);
   const cached = jwksByUri.get(key);
   if (cached) {
     cached.lastUsedAt = now;
     return cached.jwks;
   }
 
+  // Only build the real URL (string replace + URL parse) on an actual cache
+  // miss - the common case (same realm hit repeatedly) skips this entirely.
+  const jwksUri = new URL(jwksTemplate.replace("${realm}", realm), issuer);
   const jwks = createRemoteJWKSet(jwksUri);
   jwksByUri.set(key, { jwks, lastUsedAt: now });
   return jwks;
