@@ -173,6 +173,26 @@
         "operationId": "eventim-protected-echo-route"
       }
     },
+    "/real-keycloak-protected": {
+      "x-zuplo-path": {
+        "pathMode": "open-api"
+      },
+      "get": {
+        "summary": "TEST: eventimJwksAuthPolicy against a real, locally-run Keycloak instance",
+        "description": "Not a real product route - validates the corrected policy against a genuine external IdP (Keycloak in Docker, tunneled via Cloudflare) rather than our mock-idp.",
+        "x-zuplo-route": {
+          "corsPolicy": "none",
+          "handler": {
+            "export": "default",
+            "module": "$import(./modules/protected-handler)"
+          },
+          "policies": {
+            "inbound": ["real-keycloak-auth-test"]
+          }
+        },
+        "operationId": "real-keycloak-protected-route"
+      }
+    },
     "/fetch-span-test": {
       "x-zuplo-path": {
         "pathMode": "open-api"

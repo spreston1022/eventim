@@ -39,6 +39,20 @@
         "export": "fetchSpanTestPolicy",
         "module": "$import(./modules/fetch-span-test-policy)"
       }
+    },
+    {
+      "name": "real-keycloak-auth-test",
+      "policyType": "custom-code-inbound",
+      "handler": {
+        "export": "eventimJwksAuthPolicy",
+        "module": "$import(./modules/eventim-jwks-policy)",
+        "options": {
+          "issuerPrefixes": [
+            "https://statements-jackets-garlic-merry.trycloudflare.com"
+          ],
+          "jwksTemplate": "/realms/${realm}/protocol/openid-connect/certs"
+        }
+      }
     }
   ]
 }
