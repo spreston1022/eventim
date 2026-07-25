@@ -147,6 +147,32 @@
         "operationId": "eventim-protected-route"
       }
     },
+    "/eventim-protected-echo": {
+      "x-zuplo-path": {
+        "pathMode": "open-api"
+      },
+      "get": {
+        "summary": "TEST: auth policy + a real outbound forward, to see genuine outbound latency in traces",
+        "description": "Not a real product route - same auth policy as /eventim-protected, but forwards to a dummy echo endpoint instead of returning a local JSON response, so the trace shows a real network round-trip like Sebastian's production route does.",
+        "x-eventim-auth": {
+          "audience": "https://api.eventim-dummy.com"
+        },
+        "x-zuplo-route": {
+          "corsPolicy": "none",
+          "handler": {
+            "export": "urlForwardHandler",
+            "module": "$import(@zuplo/runtime)",
+            "options": {
+              "baseUrl": "https://echo.zuplo.io"
+            }
+          },
+          "policies": {
+            "inbound": ["eventim-jwks-auth-test"]
+          }
+        },
+        "operationId": "eventim-protected-echo-route"
+      }
+    },
     "/fetch-span-test": {
       "x-zuplo-path": {
         "pathMode": "open-api"
