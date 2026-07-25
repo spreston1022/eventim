@@ -193,6 +193,29 @@
         "operationId": "real-keycloak-protected-route"
       }
     },
+    "/real-keycloak-protected-echo": {
+      "x-zuplo-path": {
+        "pathMode": "open-api"
+      },
+      "get": {
+        "summary": "TEST: real Keycloak auth + a real outbound backend call",
+        "description": "Not a real product route - combines real external IdP verification with a real network round-trip to a backend (echo.zuplo.io), for a fully representative end-to-end performance picture.",
+        "x-zuplo-route": {
+          "corsPolicy": "none",
+          "handler": {
+            "export": "urlForwardHandler",
+            "module": "$import(@zuplo/runtime)",
+            "options": {
+              "baseUrl": "https://echo.zuplo.io"
+            }
+          },
+          "policies": {
+            "inbound": ["real-keycloak-auth-test"]
+          }
+        },
+        "operationId": "real-keycloak-protected-echo-route"
+      }
+    },
     "/fetch-span-test": {
       "x-zuplo-path": {
         "pathMode": "open-api"
