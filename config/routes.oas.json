@@ -179,12 +179,15 @@
       },
       "get": {
         "summary": "TEST: eventimJwksAuthPolicy against a real, locally-run Keycloak instance",
-        "description": "Not a real product route - validates the corrected policy against a genuine external IdP (Keycloak in Docker, tunneled via Cloudflare) rather than our mock-idp.",
+        "description": "Not a real product route - validates the corrected policy against a genuine external IdP (Keycloak in Docker, tunneled via ngrok) rather than our mock-idp. Forwards to echo.zuplo.io as the origin - swap baseUrl to point at a different backend.",
         "x-zuplo-route": {
           "corsPolicy": "none",
           "handler": {
-            "export": "default",
-            "module": "$import(./modules/protected-handler)"
+            "export": "urlForwardHandler",
+            "module": "$import(@zuplo/runtime)",
+            "options": {
+              "baseUrl": "https://echo.zuplo.io"
+            }
           },
           "policies": {
             "inbound": ["real-keycloak-auth-test"]
