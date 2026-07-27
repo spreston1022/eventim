@@ -48,7 +48,7 @@
         "module": "$import(./modules/eventim-jwks-policy)",
         "options": {
           "issuerPrefixes": [
-            "https://statements-jackets-garlic-merry.trycloudflare.com"
+            "https://traverse-emblem-justifier.ngrok-free.dev"
           ],
           "jwksTemplate": "/realms/${realm}/protocol/openid-connect/certs"
         }
