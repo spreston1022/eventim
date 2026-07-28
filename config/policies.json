@@ -63,7 +63,8 @@
         "options": {
           "rateLimitBy": "all",
           "requestsAllowed": 1200000,
-          "timeWindowMinutes": 1
+          "timeWindowMinutes": 1,
+          "mode": "async"
         }
       }
     }
