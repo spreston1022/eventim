@@ -53,6 +53,19 @@
           "jwksTemplate": "/realms/${realm}/protocol/openid-connect/certs"
         }
       }
+    },
+    {
+      "name": "sanity-ceiling-rate-limit",
+      "policyType": "rate-limit-inbound",
+      "handler": {
+        "export": "RateLimitInboundPolicy",
+        "module": "$import(@zuplo/runtime)",
+        "options": {
+          "rateLimitBy": "all",
+          "requestsAllowed": 1200000,
+          "timeWindowMinutes": 1
+        }
+      }
     }
   ]
 }

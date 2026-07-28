@@ -190,7 +190,7 @@
             }
           },
           "policies": {
-            "inbound": ["real-keycloak-auth-test"]
+            "inbound": ["real-keycloak-auth-test", "sanity-ceiling-rate-limit"]
           }
         },
         "operationId": "real-keycloak-protected-route"
@@ -213,7 +213,7 @@
             }
           },
           "policies": {
-            "inbound": ["real-keycloak-auth-test"]
+            "inbound": ["real-keycloak-auth-test", "sanity-ceiling-rate-limit"]
           }
         },
         "operationId": "real-keycloak-protected-echo-route"
