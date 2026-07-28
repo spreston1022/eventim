@@ -1,7 +1,6 @@
 import { OpenTelemetryPlugin } from "@zuplo/otel";
-import { RuntimeExtensions, ZuploContext, ZuploRequest } from "@zuplo/runtime";
+import { RuntimeExtensions } from "@zuplo/runtime";
 import { McpGatewayPlugin } from "@zuplo/runtime/mcp-gateway";
-import { originDurations, requestStartTimes } from "./timing-context.js";
 
 /**
  * `runtimeInit` runs once when your gateway boots. Use it to register plugins
@@ -45,39 +44,4 @@ export function runtimeInit(runtime: RuntimeExtensions) {
   //     source: "my-api",
   //   }),
   // );
-
-  // --- Gateway vs. origin timing log ----------------------------------------
-  // Logs total elapsed time (request start -> response ready) and, when the
-  // route's handler is timed-forward-handler.ts, the origin call's own
-  // measured duration - so gateway time (policies + overhead) = total -
-  // origin, computed from real measurements, not an assumption that policy
-  // time is negligible.
-  runtime.addRequestHook((request: ZuploRequest, context: ZuploContext) => {
-    requestStartTimes.set(context, Date.now());
-    return request;
-  });
-
-  runtime.addResponseSendingHook(
-    (response: Response, request: ZuploRequest, context: ZuploContext) => {
-      const start = requestStartTimes.get(context);
-      if (start !== undefined) {
-        const totalMs = Date.now() - start;
-        const originMs = originDurations.get(context);
-        const path = new URL(request.url).pathname;
-        if (originMs !== undefined) {
-          const gatewayMs = totalMs - originMs;
-          context.log.info(
-            `[timing] ${request.method} ${path} - total=${totalMs}ms origin=${originMs}ms gateway=${gatewayMs}ms`,
-          );
-          originDurations.delete(context);
-        } else {
-          context.log.info(
-            `[timing] ${request.method} ${path} - total=${totalMs}ms (no origin call measured)`,
-          );
-        }
-        requestStartTimes.delete(context);
-      }
-      return response;
-    },
-  );
 }
