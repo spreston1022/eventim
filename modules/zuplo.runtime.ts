@@ -17,7 +17,8 @@ export function runtimeInit(runtime: RuntimeExtensions) {
   // Remove this plugin if you are not using the MCP Gateway features.
   runtime.addPlugin(new McpGatewayPlugin());
 
-  // --- OpenTelemetry tracing - TEMP 5% for span-count verification ----------
+  // --- OpenTelemetry tracing -------------------------------------------------
+  // Sampled OTel at 5%. Do not exceed 10%.
   runtime.addPlugin(
     new OpenTelemetryPlugin({
       sampling: {
