@@ -17,16 +17,11 @@ export function runtimeInit(runtime: RuntimeExtensions) {
   // Remove this plugin if you are not using the MCP Gateway features.
   runtime.addPlugin(new McpGatewayPlugin());
 
-  // --- OpenTelemetry tracing - 1% sampled -----------------------------------
-  // Full OTel on every request was a measured performance concern, so this
-  // uses head sampling (ratio: 0.01) - the sampling decision happens at
-  // trace creation, before any span work is done, so the ~99% of requests
-  // that aren't sampled skip span creation/export entirely rather than
-  // paying full OTel cost and being discarded afterward.
+  // --- OpenTelemetry tracing - TEMP 5% for span-count verification ----------
   runtime.addPlugin(
     new OpenTelemetryPlugin({
       sampling: {
-        headSampler: { ratio: 0.01 },
+        headSampler: { ratio: 0.05 },
       },
     }),
   );
